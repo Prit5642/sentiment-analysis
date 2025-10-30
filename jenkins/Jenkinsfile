@@ -2,23 +2,26 @@ pipeline {
     agent any
     
     environment {
-        PYTHON_VERSION = '3.9'
-        PROJECT_NAME = 'sentiment-analysis-mlops'
+        PYTHON_VERSION = '3.12'  // Update to match your Python version
+        PROJECT_NAME = 'sentiment-analysis'
+        GITHUB_REPO = 'https://github.com/Prit5642/sentiment-analysis.git'
     }
     
     stages {
         stage('Checkout') {
             steps {
+                // Clean workspace before checkout
+                cleanWs()
                 checkout scm
             }
         }
         
         stage('Setup Environment') {
             steps {
-                sh '''
+                bat '''
                     python -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
+                    call venv\\Scripts\\activate.bat
+                    python -m pip install --upgrade pip
                     pip install -r requirements.txt
                 '''
             }
@@ -26,9 +29,10 @@ pipeline {
         
         stage('Run Tests') {
             steps {
-                sh '''
-                    . venv/bin/activate
-                    python -m pytest tests/ -v --cov=app --cov-report=xml
+                bat '''
+                    call venv\\Scripts\\activate.bat
+                    mkdir tests\\reports
+                    python -m pytest tests/ -v --cov=app --cov-report=xml --junitxml=tests/reports/test-results.xml
                 '''
             }
             post {
@@ -41,20 +45,21 @@ pipeline {
         
         stage('Code Quality') {
             steps {
-                sh '''
-                    . venv/bin/activate
+                bat '''
+                    call venv\\Scripts\\activate.bat
                     pip install pylint flake8 black
                     black --check app/ webapp/ dbapp/
                     flake8 app/ webapp/ dbapp/ --max-line-length=100
-                    pylint app/ webapp/ dbapp/
+                    pylint app/ webapp/ dbapp/ --output-format=parseable --reports=no > pylint-report.txt
                 '''
+                recordIssues tools: [flake8(), pyLint(pattern: 'pylint-report.txt')]
             }
         }
         
         stage('Security Scan') {
             steps {
-                sh '''
-                    . venv/bin/activate
+                bat '''
+                    call venv\\Scripts\\activate.bat
                     pip install bandit safety
                     bandit -r app/ webapp/ dbapp/ -f html -o security_report.html
                     safety check --json > safety_report.json
@@ -76,8 +81,8 @@ pipeline {
         
         stage('Build Validation') {
             steps {
-                sh '''
-                    . venv/bin/activate
+                bat '''
+                    call venv\\Scripts\\activate.bat
                     python -c "from app.prediction import predictor; print('Model loaded successfully')"
                     python -c "from app.database import db_manager; db_manager.init_db(); print('Database initialized')"
                 '''
@@ -89,9 +94,16 @@ pipeline {
                 branch 'develop'
             }
             steps {
-                sh '''
-                    echo "Deploying to staging environment..."
-                    # Add your staging deployment commands here
+                bat '''
+                    echo Deploying to staging environment...
+                    rem Create staging deployment script
+                    echo call venv\\Scripts\\activate.bat > deploy_staging.bat
+                    echo set FLASK_ENV=staging >> deploy_staging.bat
+                    echo start /B python run_webapp.py >> deploy_staging.bat
+                    echo start /B python run_dbapp.py >> deploy_staging.bat
+                    
+                    rem Run deployment
+                    call deploy_staging.bat
                 '''
             }
         }
@@ -101,18 +113,23 @@ pipeline {
                 branch 'main'
             }
             steps {
-                sh '''
-                    echo "Deploying to production environment..."
-                    # Add your production deployment commands here
-                '''
-                
-                // Restart services
-                sh '''
-                    pkill -f "python run_webapp.py" || true
-                    pkill -f "python run_dbapp.py" || true
-                    nohup python run_webapp.py > webapp.log 2>&1 &
-                    nohup python run_dbapp.py > dbapp.log 2>&1 &
-                    echo "Services restarted successfully"
+                bat '''
+                    echo Deploying to production environment...
+                    
+                    rem Stop existing services
+                    taskkill /F /FI "WINDOWTITLE eq sentiment-webapp" /T
+                    taskkill /F /FI "WINDOWTITLE eq sentiment-dbapp" /T
+                    
+                    rem Create production deployment script
+                    echo call venv\\Scripts\\activate.bat > deploy_prod.bat
+                    echo set FLASK_ENV=production >> deploy_prod.bat
+                    echo start "sentiment-webapp" /B python run_webapp.py >> deploy_prod.bat
+                    echo start "sentiment-dbapp" /B python run_dbapp.py >> deploy_prod.bat
+                    
+                    rem Run deployment
+                    call deploy_prod.bat
+                    
+                    echo Services restarted successfully
                 '''
             }
         }
@@ -120,20 +137,50 @@ pipeline {
     
     post {
         always {
-            cleanWs()
+            // Archive the test reports and logs
+            archiveArtifacts artifacts: '**/test-results.xml, **/coverage.xml, security_report.html, safety_report.json, pylint-report.txt, **/*.log', allowEmptyArchive: true
+            
+            // Clean up workspace but keep logs
+            bat '''
+                if exist venv rmdir /s /q venv
+                if exist __pycache__ rmdir /s /q __pycache__
+                if exist .pytest_cache rmdir /s /q .pytest_cache
+            '''
         }
         success {
+            echo 'Build succeeded! Sending notification...'
+            // You can configure email settings in Jenkins
             emailext (
-                subject: "SUCCESS: Job ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
-                body: "The build ${env.BUILD_URL} completed successfully.",
-                to: "devops@example.com"
+                subject: "✅ SUCCESS: ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
+                body: """
+                    Project: ${env.JOB_NAME}
+                    Build Number: ${env.BUILD_NUMBER}
+                    Build URL: ${env.BUILD_URL}
+                    
+                    The build completed successfully.
+                    
+                    Check the artifacts and test reports in Jenkins for more details.
+                """,
+                to: 'pritshah096@gmail.com',  // Update with your email
+                attachLog: true
             )
         }
         failure {
+            echo 'Build failed! Sending notification...'
             emailext (
-                subject: "FAILED: Job ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
-                body: "The build ${env.BUILD_URL} failed. Please check the console output.",
-                to: "devops@example.com"
+                subject: "❌ FAILED: ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
+                body: """
+                    Project: ${env.JOB_NAME}
+                    Build Number: ${env.BUILD_NUMBER}
+                    Build URL: ${env.BUILD_URL}
+                    
+                    The build failed. Please check the console output and test reports.
+                    
+                    Console Output: ${env.BUILD_URL}console
+                    Test Report: ${env.BUILD_URL}test_report/
+                """,
+                to: 'pritshah096@gmail.com',  // Update with your email
+                attachLog: true
             )
         }
     }
