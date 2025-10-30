@@ -60,21 +60,21 @@ pipeline {
                 catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
                     bat '''
                         C:\\Python312\\Scripts\\pip.exe install --no-deps bandit safety
-                        bandit -r app/ webapp/ dbapp/ -f html -o security_report.html || exit 0
-                        safety check --json > safety_report.json || exit 0
+                        bandit -r app/ webapp/ dbapp/ -f html -o bandit_report.html || exit 0
+                        safety scan --json --output safety_report.json requirements.txt || exit 0
                     '''
                 }
             }
             post {
                 always {
-                    publishHTML target: [
+                    publishHTML([
                         allowMissing: true,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: '.',
-                        reportFiles: 'security_report.html',
-                        reportName: 'Security Report'
-                    ]
+                        reportFiles: 'bandit_report.html',
+                        reportName: 'Bandit Security Report'
+                    ])
                 }
             }
         }
