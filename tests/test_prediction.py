@@ -1,7 +1,6 @@
 import pytest
 import torch
 from app.prediction import SentimentPredictor
-from app.preprocessing import TextPreprocessor
 from config.settings import Config
 
 class TestPrediction:
