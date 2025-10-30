@@ -29,24 +29,6 @@ def start_prometheus():
     ])
     return prometheus_process
 
-def start_grafana():
-    """Start Grafana dashboard"""
-    print("Starting Grafana...")
-    
-    # Set Grafana environment variables
-    env = os.environ.copy()
-    env['GF_PATHS_DATA'] = 'monitoring/grafana_data'
-    env['GF_PATHS_LOGS'] = 'monitoring/grafana_logs'
-    env['GF_PATHS_PROVISIONING'] = 'monitoring/grafana/provisioning'
-    
-    grafana_process = subprocess.Popen([
-        r'C:\grafana-12.2.1\bin\grafana-server',
-        '--config=monitoring/grafana.ini',
-        '--homepath=/usr/share/grafana'
-    ], env=env)
-    
-    return grafana_process
-
 if __name__ == '__main__':
     print("Starting Monitoring Stack...")
     
@@ -54,11 +36,15 @@ if __name__ == '__main__':
         # Start Prometheus
         prometheus = start_prometheus()
         
-        # Start Grafana
-        # grafana = start_grafana()
-        
         print(f"Prometheus started at: http://localhost:{Config.PROMETHEUS_PORT}")
-        # print(f"Grafana started at: http://localhost:{Config.GRAFANA_PORT}")
+        print(f"Grafana is running at: http://localhost:{Config.GRAFANA_PORT}")
+        print("\nTo configure Grafana with Prometheus:")
+        print("1. Open Grafana at http://localhost:3000")
+        print("2. Log in with default credentials (admin/admin) if you haven't changed them")
+        print("3. Go to 'Configuration' -> 'Data Sources'")
+        print("4. Click 'Add data source' and select 'Prometheus'")
+        print("5. Set URL to 'http://localhost:9090'")
+        print("6. Click 'Save & Test'\n")
         print("Monitoring stack is running. Press Ctrl+C to stop.")
         
         # Keep the script running
@@ -68,5 +54,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("\nStopping monitoring stack...")
         prometheus.terminate()
-        # grafana.terminate()
-        print("Monitoring stack stopped.")
+        print("Prometheus stopped. Grafana is still running as a Windows service.")
