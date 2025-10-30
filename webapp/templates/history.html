@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Prediction History - Sentiment Analysis{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="fas fa-history"></i> Prediction History</h4>
+                <span class="badge bg-primary">Total: {{ total }} predictions</span>
+            </div>
+            <div class="card-body">
+                {% if predictions %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID</th>
+                                <th>Text Preview</th>
+                                <th>Sentiment</th>
+                                <th>Confidence</th>
+                                <th>Score</th>
+                                <th>Processing Time</th>
+                                <th>Timestamp</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for prediction in predictions %}
+                            <tr>
+                                <td>{{ prediction.id }}</td>
+                                <td>
+                                    <span class="text-truncate" style="max-width: 200px;" title="{{ prediction.text }}">
+                                        {{ prediction.text[:80] }}{% if prediction.text|length > 80 %}...{% endif %}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge 
+                                        {% if prediction.prediction == 'Positive' %}bg-success
+                                        {% elif prediction.prediction == 'Negative' %}bg-danger
+                                        {% else %}bg-warning{% endif %}">
+                                        <i class="fas 
+                                            {% if prediction.prediction == 'Positive' %}fa-smile
+                                            {% elif prediction.prediction == 'Negative' %}fa-frown
+                                            {% else %}fa-meh{% endif %}"></i>
+                                        {{ prediction.prediction }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 20px; width: 100px;">
+                                        <div class="progress-bar 
+                                            {% if prediction.prediction == 'Positive' %}bg-success
+                                            {% elif prediction.prediction == 'Negative' %}bg-danger
+                                            {% else %}bg-warning{% endif %}" role="progressbar"
+                                            style="width: {{ prediction.confidence * 100 }}%"
+                                            aria-valuenow="{{ prediction.confidence * 100 }}" aria-valuemin="0"
+                                            aria-valuemax="100">
+                                            {{ "%.1f"|format(prediction.confidence * 100) }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="fw-bold 
+                                        {% if prediction.sentiment_score > 0.3 %}text-success
+                                        {% elif prediction.sentiment_score < -0.3 %}text-danger
+                                        {% else %}text-warning{% endif %}">
+                                        {{ "%.3f"|format(prediction.sentiment_score) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-muted">{{ "%.4f"|format(prediction.processing_time) }}s</span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ prediction.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                                        }}</small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="tooltip"
+                                        title="View Details" onclick="showPredictionDetails({{ prediction.id }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip"
+                                        title="Analyze Similar"
+                                        onclick="analyzeSimilar('{{ prediction.text|replace("'", "\\'")|truncate(100) }}')">
+                                        <i class="fas fa-redo"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <nav aria-label="Prediction history pagination">
+                    <ul class="pagination justify-content-center">
+                        {% if page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page - 1 }}">Previous</a>
+                        </li>
+                        {% endif %}
+
+                        {% for p in range(1, (total + per_page - 1) // per_page + 1) %}
+                        {% if p >= page - 2 and p <= page + 2 %} <li
+                            class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+
+                            {% if page < (total + per_page - 1) // per_page %} <li class="page-item">
+                                <a class="page-link" href="?page={{ page + 1 }}">Next</a>
+                                </li>
+                                {% endif %}
+                    </ul>
+                </nav>
+
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                    <h5>No predictions yet</h5>
+                    <p class="text-muted">Start analyzing text to see your prediction history here.</p>
+                    <a href="/predict" class="btn btn-primary">
+                        <i class="fas fa-play-circle"></i> Make First Prediction
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prediction Details Modal -->
+<div class="modal fade" id="predictionDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Prediction Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="predictionDetailsContent">
+                <!-- Content will be loaded via JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showPredictionDetails(predictionId) {
+        fetch(`/api/prediction/${predictionId}`)
+            .then(response => response.json())
+            .then(data => {
+                const modalContent = document.getElementById('predictionDetailsContent');
+                modalContent.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Text:</h6>
+                        <p class="border p-3 bg-light">${data.text}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Prediction Details:</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Sentiment:</strong></td>
+                                <td>
+                                    <span class="badge ${getSentimentBadgeClass(data.prediction)}">
+                                        ${data.prediction}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Confidence:</strong></td>
+                                <td>${(data.confidence * 100).toFixed(2)}%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Score:</strong></td>
+                                <td>${data.sentiment_score.toFixed(3)}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Processing Time:</strong></td>
+                                <td>${data.processing_time.toFixed(4)}s</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Request ID:</strong></td>
+                                <td><small>${data.request_id}</small></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Timestamp:</strong></td>
+                                <td>${new Date(data.timestamp).toLocaleString()}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Confidence Visualization:</h6>
+                        <div class="progress" style="height: 30px;">
+                            <div class="progress-bar ${getSentimentBadgeClass(data.prediction).replace('badge', 'bg')}" 
+                                 style="width: ${data.confidence * 100}%">
+                                ${(data.confidence * 100).toFixed(1)}% Confidence
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+                new bootstrap.Modal(document.getElementById('predictionDetailsModal')).show();
+            })
+            .catch(error => {
+                console.error('Error fetching prediction details:', error);
+                alert('Error loading prediction details');
+            });
+    }
+
+    function analyzeSimilar(text) {
+        window.location.href = `/predict?text=${encodeURIComponent(text)}`;
+    }
+
+    function getSentimentBadgeClass(sentiment) {
+        switch (sentiment) {
+            case 'Positive': return 'bg-success';
+            case 'Negative': return 'bg-danger';
+            default: return 'bg-warning';
+        }
+    }
+
+    // Initialize tooltips
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,140 @@
+pipeline {
+    agent any
+    
+    environment {
+        PYTHON_VERSION = '3.9'
+        PROJECT_NAME = 'sentiment-analysis-mlops'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Setup Environment') {
+            steps {
+                sh '''
+                    python -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                '''
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    python -m pytest tests/ -v --cov=app --cov-report=xml
+                '''
+            }
+            post {
+                always {
+                    junit 'tests/reports/*.xml'
+                    publishCoverage adapters: [coberturaAdapter('coverage.xml')]
+                }
+            }
+        }
+        
+        stage('Code Quality') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    pip install pylint flake8 black
+                    black --check app/ webapp/ dbapp/
+                    flake8 app/ webapp/ dbapp/ --max-line-length=100
+                    pylint app/ webapp/ dbapp/
+                '''
+            }
+        }
+        
+        stage('Security Scan') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    pip install bandit safety
+                    bandit -r app/ webapp/ dbapp/ -f html -o security_report.html
+                    safety check --json > safety_report.json
+                '''
+            }
+            post {
+                always {
+                    publishHTML target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'security_report.html',
+                        reportName: 'Security Report'
+                    ]
+                }
+            }
+        }
+        
+        stage('Build Validation') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    python -c "from app.prediction import predictor; print('Model loaded successfully')"
+                    python -c "from app.database import db_manager; db_manager.init_db(); print('Database initialized')"
+                '''
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            when {
+                branch 'develop'
+            }
+            steps {
+                sh '''
+                    echo "Deploying to staging environment..."
+                    # Add your staging deployment commands here
+                '''
+            }
+        }
+        
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh '''
+                    echo "Deploying to production environment..."
+                    # Add your production deployment commands here
+                '''
+                
+                // Restart services
+                sh '''
+                    pkill -f "python run_webapp.py" || true
+                    pkill -f "python run_dbapp.py" || true
+                    nohup python run_webapp.py > webapp.log 2>&1 &
+                    nohup python run_dbapp.py > dbapp.log 2>&1 &
+                    echo "Services restarted successfully"
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            emailext (
+                subject: "SUCCESS: Job ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
+                body: "The build ${env.BUILD_URL} completed successfully.",
+                to: "devops@example.com"
+            )
+        }
+        failure {
+            emailext (
+                subject: "FAILED: Job ${env.JOB_NAME} - Build ${env.BUILD_NUMBER}",
+                body: "The build ${env.BUILD_URL} failed. Please check the console output.",
+                to: "devops@example.com"
+            )
+        }
+    }
+}
