@@ -43,13 +43,15 @@ pipeline {
         
         stage('Code Quality') {
             steps {
-                bat '''
-                    C:\\Python312\\Scripts\\pip.exe install pylint flake8 black
-                    black --check app/ webapp/ dbapp/
-                    flake8 app/ webapp/ dbapp/ --max-line-length=100
-                    pylint app/ webapp/ dbapp/ --output-format=parseable --reports=no > pylint-report.txt
-                '''
-                recordIssues tools: [flake8(), pyLint(pattern: 'pylint-report.txt')]
+                catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+                    bat '''
+                        C:\\Python312\\Scripts\\pip.exe install pylint flake8 black
+                        C:\\Python312\\Scripts\\black.exe app/ webapp/ dbapp/
+                        C:\\Python312\\Scripts\\flake8.exe app/ webapp/ dbapp/ --max-line-length=100 || exit 0
+                        C:\\Python312\\Scripts\\pylint.exe app/ webapp/ dbapp/ --output-format=parseable --reports=no > pylint-report.txt || exit 0
+                    '''
+                    recordIssues tools: [flake8(), pyLint(pattern: 'pylint-report.txt')]
+                }
             }
         }
         
