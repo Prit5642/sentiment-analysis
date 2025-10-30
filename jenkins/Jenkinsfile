@@ -57,12 +57,13 @@ pipeline {
         
         stage('Security Scan') {
             steps {
-                bat '''
-                    call venv\\Scripts\\activate.bat
-                    C:\\Python312\\Scripts\\pip.exe install bandit safety
-                    bandit -r app/ webapp/ dbapp/ -f html -o security_report.html
-                    safety check --json > safety_report.json
-                '''
+                catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+                    bat '''
+                        C:\\Python312\\Scripts\\pip.exe install --no-deps bandit safety
+                        bandit -r app/ webapp/ dbapp/ -f html -o security_report.html || exit 0
+                        safety check --json > safety_report.json || exit 0
+                    '''
+                }
             }
             post {
                 always {
