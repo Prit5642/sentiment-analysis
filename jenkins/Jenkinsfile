@@ -66,7 +66,12 @@ pipeline {
         
         stage('Deploy to Staging') {
             when {
-                branch 'develop'
+                anyOf {
+                    branch 'develop'
+                    expression {
+                        return env.BRANCH_NAME == null
+                    }
+                }
             }
             steps {
                 bat '''
@@ -84,15 +89,21 @@ pipeline {
         
         stage('Deploy to Production') {
             when {
-                branch 'main'
+                anyOf {
+                    branch 'main'
+                    branch 'master'
+                    expression { 
+                        return env.BRANCH_NAME == null || env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master'
+                    }
+                }
             }
             steps {
                 bat '''
                     echo Deploying to production environment...
                     
                     rem Stop existing services
-                    taskkill /F /FI "WINDOWTITLE eq sentiment-webapp" /T
-                    taskkill /F /FI "WINDOWTITLE eq sentiment-dbapp" /T
+                    taskkill /F /FI "WINDOWTITLE eq sentiment-webapp" /T || exit 0
+                    taskkill /F /FI "WINDOWTITLE eq sentiment-dbapp" /T || exit 0
                     
                     rem Create production deployment script
                     echo set FLASK_ENV=production > deploy_prod.bat
