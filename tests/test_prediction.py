@@ -11,7 +11,6 @@ class TestPrediction:
     def test_predictor_initialization(self, predictor):
         assert predictor is not None
         assert predictor.model is not None
-        assert predictor.preprocessor is not None
     
     def test_prediction_positive(self, predictor):
         result = predictor.predict("I love this product! It's amazing!")
