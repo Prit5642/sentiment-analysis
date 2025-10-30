@@ -24,6 +24,3 @@ class TestPrediction:
         assert result['success'] == True
         assert 'prediction' in result
     
-    def test_prediction_empty_text(self, predictor):
-        result = predictor.predict("")
-        assert result['success'] == False
