@@ -19,9 +19,9 @@ pipeline {
         stage('Setup Environment') {
             steps {
                 bat '''
-                    python -m venv venv
+                    C:\Python312\python.exe -m venv venv
                     call venv\\Scripts\\activate.bat
-                    python -m pip install --upgrade pip
+                    C:\Python312\python.exe -m pip install --upgrade pip
                     pip install -r requirements.txt
                 '''
             }
@@ -32,7 +32,7 @@ pipeline {
                 bat '''
                     call venv\\Scripts\\activate.bat
                     mkdir tests\\reports
-                    python -m pytest tests/ -v --cov=app --cov-report=xml --junitxml=tests/reports/test-results.xml
+                    C:\Python312\python.exe -m pytest tests/ -v --cov=app --cov-report=xml --junitxml=tests/reports/test-results.xml
                 '''
             }
             post {
